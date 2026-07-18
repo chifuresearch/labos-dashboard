@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1a19">
+<title>Lab OS 儀表板</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+/* ── 色彩 tokens(light / dark 皆為選定色階)────────────── */
+:root{
+  color-scheme: light;
+  --page:#f9f9f7; --surface:#fcfcfb;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --border:rgba(11,11,11,.10);
+  --accent:#2a78d6;
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --good-text:#006300;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19;
+    --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --border:rgba(255,255,255,.10);
+    --accent:#3987e5;
+    --good-text:#0ca30c;
+  }
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--page); color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI","Noto Sans TC",sans-serif;
+  font-size:15px; line-height:1.55;
+  padding:max(env(safe-area-inset-top),8px) 12px calc(env(safe-area-inset-bottom) + 24px);
+  max-width:720px; margin-inline:auto;
+}
+header{display:flex; align-items:center; gap:8px; padding:10px 2px}
+header h1{font-size:19px; margin:0; flex:1}
+.iconbtn{border:1px solid var(--border); background:var(--surface); color:var(--ink);
+  border-radius:10px; padding:7px 11px; font-size:15px; cursor:pointer}
+.card{background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:14px 15px; margin:10px 0}
+.card h2{font-size:14px; margin:0 0 10px; color:var(--ink-2);
+  text-transform:none; letter-spacing:.02em}
+/* stat tiles */
+.tiles{display:grid; grid-template-columns:repeat(4,1fr); gap:8px}
+.tile{background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:10px 6px; text-align:center}
+.tile .v{font-size:22px; font-weight:700}
+.tile .k{font-size:11px; color:var(--muted); margin-top:2px}
+/* status chips:狀態色永遠搭配 icon+文字,不單靠顏色 */
+.chip{display:inline-flex; align-items:center; gap:4px; border-radius:999px;
+  padding:1px 9px 1px 7px; font-size:12px; font-weight:600; border:1px solid var(--border)}
+.chip .dot{font-size:11px}
+.chip.good{color:var(--good-text)} .chip.good .dot{color:var(--good)}
+.chip.warning{color:var(--ink-2)} .chip.warning .dot{color:var(--warning)}
+.chip.serious{color:var(--ink-2)} .chip.serious .dot{color:var(--serious)}
+.chip.critical{color:var(--critical)}
+.chip.muted{color:var(--muted)}
+/* 論文列表 */
+.paper{padding:10px 0; border-top:1px solid var(--grid)}
+.paper:first-of-type{border-top:none}
+.paper .t{font-weight:600; font-size:14px}
+.paper .t a{color:var(--ink); text-decoration:none}
+.paper .meta{display:flex; gap:6px; align-items:center; margin:4px 0; flex-wrap:wrap}
+.score{font-variant-numeric:tabular-nums; font-size:12px; color:var(--ink-2);
+  border:1px solid var(--border); border-radius:6px; padding:0 6px}
+.paper .sum{font-size:13px; color:var(--ink-2)}
+/* 艦隊 */
+.fleet-row{display:flex; align-items:center; gap:8px; padding:7px 0;
+  border-top:1px solid var(--grid)}
+.fleet-row:first-of-type{border-top:none}
+.fleet-row .name{flex:1; font-weight:600; font-size:14px}
+.fleet-row a{color:var(--muted); font-size:12px; text-decoration:none}
+/* 日報 */
+pre.digest{white-space:pre-wrap; font-family:inherit; font-size:13.5px;
+  color:var(--ink-2); margin:0; max-height:340px; overflow-y:auto}
+/* 出任務 */
+label{font-size:12px; color:var(--muted); display:block; margin:8px 0 3px}
+input,select{width:100%; padding:9px 11px; border-radius:10px; font-size:15px;
+  border:1px solid var(--border); background:var(--page); color:var(--ink)}
+.btn{width:100%; margin-top:12px; padding:12px; border:none; border-radius:11px;
+  background:var(--accent); color:#fff; font-size:15px; font-weight:700; cursor:pointer}
+.btn:disabled{opacity:.5}
+.btn.ghost{background:transparent; color:var(--accent); border:1px solid var(--accent)}
+/* misc */
+.hint{font-size:12px; color:var(--muted)}
+.err{color:var(--critical); font-size:13px; white-space:pre-wrap}
+#toast{position:fixed; left:50%; bottom:28px; transform:translateX(-50%);
+  background:var(--ink); color:var(--page); padding:9px 16px; border-radius:10px;
+  font-size:14px; opacity:0; transition:opacity .25s; pointer-events:none; max-width:88vw}
+dialog{border:1px solid var(--border); border-radius:16px; background:var(--surface);
+  color:var(--ink); width:min(92vw,420px); padding:18px}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.skel{color:var(--muted); font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🔬 Lab OS</h1>
+  <button class="iconbtn" id="refreshBtn" title="重新整理">↻</button>
+  <button class="iconbtn" id="setupBtn" title="設定">⚙︎</button>
+</header>
+
+<div class="tiles" id="tiles">
+  <div class="tile"><div class="v" id="t-total">–</div><div class="k">本次抓取</div></div>
+  <div class="tile"><div class="v" id="t-keep">–</div><div class="k">通過守門</div></div>
+  <div class="tile"><div class="v" id="t-nov">–</div><div class="k">平均新穎度</div></div>
+  <div class="tile"><div class="v" id="t-time">–</div><div class="k">最近更新</div></div>
+</div>
+
+<div class="card">
+  <h2>🚁 艦隊狀態</h2>
+  <div id="fleet"><div class="skel">載入中…</div></div>
+</div>
+
+<div class="card">
+  <h2>🚀 出任務(觸發整條鏈:抓取 → 評分 → 推播)</h2>
+  <label for="topic">研究主題關鍵字</label>
+  <input id="topic" value="digital fabrication" autocomplete="off">
+  <label for="maxr">抓取篇數</label>
+  <select id="maxr"><option>5</option><option selected>10</option><option>20</option></select>
+  <button class="btn" id="launchBtn">起跑 labos-research</button>
+  <div class="hint" style="margin-top:8px">起跑後約 2~3 分鐘,手機會收到 ntfy 日報推播。</div>
+</div>
+
+<div class="card">
+  <h2>📚 論文評分(labos-evaluation 最新一批)</h2>
+  <div id="papers"><div class="skel">載入中…</div></div>
+</div>
+
+<div class="card">
+  <h2>📱 今日日報 digest.txt</h2>
+  <pre class="digest" id="digest">載入中…</pre>
+</div>
+
+<dialog id="setupDlg">
+  <h2 style="margin-top:0">⚙︎ 連線設定</h2>
+  <label for="owner">GitHub 帳號 (owner)</label>
+  <input id="owner" placeholder="例如 chifu-hsiao" autocomplete="off">
+  <label for="pat">Fine-grained PAT</label>
+  <input id="pat" type="password" placeholder="github_pat_...">
+  <div class="hint" style="margin-top:8px">
+    PAT 需求:三個 labos-* repo,權限 Contents (R/W) + Actions (R/W)。
+    只存在這台裝置的瀏覽器,不會上傳任何地方。
+  </div>
+  <button class="btn" id="saveBtn">儲存並載入</button>
+  <button class="btn ghost" id="closeBtn" style="margin-top:8px">關閉</button>
+</dialog>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* Lab OS PWA 儀表板 — Render Agent
+   讀:digest.txt / papers_evaluated.json / 三 repo 最新 run 狀態
+   寫:workflow_dispatch 觸發 labos-research 起跑整條鏈           */
+const REPOS = ["labos-research", "labos-evaluation", "labos-notify"];
+const API = "https://api.github.com";
+const $ = (id) => document.getElementById(id);
+const cfg = {
+  get owner(){ return localStorage.getItem("labos_owner") || ""; },
+  get pat(){ return localStorage.getItem("labos_pat") || ""; },
+  save(o, p){ localStorage.setItem("labos_owner", o);
+              localStorage.setItem("labos_pat", p); },
+  get ok(){ return !!(this.owner && this.pat); },
+};
+
+function toast(msg){
+  const t = $("toast"); t.textContent = msg; t.style.opacity = 1;
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.opacity = 0, 3200);
+}
+function esc(s){ const d = document.createElement("div");
+  d.textContent = s ?? ""; return d.innerHTML; }
+
+async function gh(path, opts = {}){
+  const r = await fetch(`${API}${path}`, {
+    ...opts,
+    headers: {
+      "Authorization": `Bearer ${cfg.pat}`,
+      "Accept": opts.raw ? "application/vnd.github.raw" : "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...(opts.headers || {}),
+    },
+  });
+  if (r.status === 401) throw new Error("PAT 無效或過期 → ⚙︎ 重新設定");
+  if (r.status === 404) throw new Error("404:repo 或檔案還不存在");
+  if (!r.ok) throw new Error(`GitHub API ${r.status}`);
+  return opts.raw ? r.text() : (r.status === 204 ? null : r.json());
+}
+
+/* 狀態 chip:一律 icon + 文字,不單靠顏色 */
+function runChip(run){
+  if (!run) return `<span class="chip muted"><span class="dot">◌</span>尚無執行</span>`;
+  if (run.status !== "completed")
+    return `<span class="chip warning"><span class="dot">●</span>執行中</span>`;
+  if (run.conclusion === "success")
+    return `<span class="chip good"><span class="dot">✔</span>成功</span>`;
+  if (run.conclusion === "failure")
+    return `<span class="chip critical"><span class="dot">✖</span>失敗</span>`;
+  return `<span class="chip muted"><span class="dot">–</span>${esc(run.conclusion)}</span>`;
+}
+function verdictChip(v){
+  if (v === "keep") return `<span class="chip good"><span class="dot">✔</span>keep</span>`;
+  if (v === "hold") return `<span class="chip warning"><span class="dot">◐</span>hold</span>`;
+  return `<span class="chip muted"><span class="dot">✖</span>drop</span>`;
+}
+const fmtTime = (iso) => !iso ? "–" :
+  new Date(iso).toLocaleString("zh-TW", {month:"numeric", day:"numeric",
+    hour:"2-digit", minute:"2-digit", hour12:false});
+
+/* ── 讀取面 ─────────────────────────────────────────── */
+async function loadFleet(){
+  const box = $("fleet"); box.innerHTML = "";
+  for (const repo of REPOS){
+    const row = document.createElement("div"); row.className = "fleet-row";
+    row.innerHTML = `<span class="name">${repo.replace("labos-","")}</span>
+      <span class="skel">…</span>`;
+    box.appendChild(row);
+    gh(`/repos/${cfg.owner}/${repo}/actions/runs?per_page=1`)
+      .then(d => {
+        const run = d.workflow_runs?.[0];
+        row.innerHTML = `<span class="name">${repo.replace("labos-","")}</span>
+          ${runChip(run)}
+          <a href="${run ? run.html_url
+            : `https://github.com/${cfg.owner}/${repo}/actions`}"
+            target="_blank" rel="noopener">${run ? fmtTime(run.run_started_at) : ""} ↗</a>`;
+      })
+      .catch(e => { row.innerHTML =
+        `<span class="name">${repo.replace("labos-","")}</span>
+         <span class="err">${esc(e.message)}</span>`; });
+  }
+}
+
+async function loadPapers(){
+  const box = $("papers");
+  try {
+    const papers = JSON.parse(await gh(
+      `/repos/${cfg.owner}/labos-evaluation/contents/data/papers_evaluated.json`,
+      {raw:true}));
+    const scored = papers
+      .map(p => ({...p, ev: p.evaluation || {}}))
+      .sort((a,b) => (b.ev.novelty_score + b.ev.cross_domain_score)
+                   - (a.ev.novelty_score + a.ev.cross_domain_score));
+    // stat tiles
+    $("t-total").textContent = papers.length;
+    $("t-keep").textContent = scored.filter(p => p.ev.verdict === "keep").length;
+    $("t-nov").textContent = (scored.reduce((s,p) => s + (p.ev.novelty_score||0), 0)
+                              / (papers.length||1)).toFixed(1);
+    $("t-time").textContent = fmtTime(papers[0]?.fetched_at);
+    box.innerHTML = scored.map(p => `
+      <div class="paper">
+        <div class="t"><a href="https://arxiv.org/abs/${esc(p.id)}" target="_blank"
+          rel="noopener">${esc(p.title)}</a></div>
+        <div class="meta">${verdictChip(p.ev.verdict)}
+          <span class="score">新穎 ${p.ev.novelty_score ?? "?"}</span>
+          <span class="score">跨域 ${p.ev.cross_domain_score ?? "?"}</span>
+          <span class="hint">${esc(p.published || "")}</span></div>
+        <div class="sum">${esc(p.ev.summary_zh || "")}</div>
+      </div>`).join("");
+  } catch(e){ box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+
+async function loadDigest(){
+  const el = $("digest");
+  try {
+    el.textContent = await gh(
+      `/repos/${cfg.owner}/labos-evaluation/contents/data/digest.txt`, {raw:true});
+  } catch(e){ el.textContent = e.message; }
+}
+
+/* ── 送資料面:一鍵起跑整條鏈 ───────────────────────── */
+async function launch(){
+  const btn = $("launchBtn"); btn.disabled = true;
+  try {
+    await gh(`/repos/${cfg.owner}/labos-research/actions/workflows/fetch_papers.yml/dispatches`,
+      { method:"POST",
+        body: JSON.stringify({ ref:"main", inputs:{
+          topic: $("topic").value || "digital fabrication",
+          max_results: $("maxr").value } }) });
+    toast("🚀 已起跑!整條鏈約 2~3 分鐘,等手機推播");
+    setTimeout(loadFleet, 4000);
+  } catch(e){ toast(`起跑失敗:${e.message}`); }
+  btn.disabled = false;
+}
+
+/* ── 啟動 ───────────────────────────────────────────── */
+function refresh(){
+  if (!cfg.ok){ $("setupDlg").showModal(); return; }
+  loadFleet(); loadPapers(); loadDigest();
+}
+$("refreshBtn").onclick = refresh;
+$("setupBtn").onclick = () => { $("owner").value = cfg.owner;
+  $("pat").value = cfg.pat; $("setupDlg").showModal(); };
+$("saveBtn").onclick = () => {
+  cfg.save($("owner").value.trim(), $("pat").value.trim());
+  $("setupDlg").close(); refresh(); };
+$("closeBtn").onclick = () => $("setupDlg").close();
+$("launchBtn").onclick = launch;
+
+if ("serviceWorker" in navigator)
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+refresh();
+</script>
+</body>
+</html>
