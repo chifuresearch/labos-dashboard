@@ -128,6 +128,20 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 </div>
 
 <div class="card">
+  <h2>🎓 出題給研究團隊</h2>
+  <label for="question">研究課題(例:gyroid 的力學效應是什麼?為什麼很多用 voxel 方式來做設計組織?)</label>
+  <textarea id="question" rows="3" style="width:100%;padding:9px 11px;
+    border-radius:10px;font-size:15px;border:1px solid var(--border);
+    background:var(--page);color:var(--ink);font-family:inherit"></textarea>
+  <button class="btn" id="askBtn" style="margin-top:10px">出題</button>
+  <div class="hint" style="margin-top:8px">
+    明早 05:00:🎓博士生拆解課題 → 🧑‍🎓碩士生團隊分 2-3 天找論文回應 →
+    🧑‍💻資工大學部寫技術實踐 → 專題報告自動上 iiaHUB。
+    沒出題的日子照常跑四領域關鍵字。</div>
+  <div id="queueView" class="hint" style="margin-top:6px"></div>
+</div>
+
+<div class="card">
   <h2>📚 論文評分(labos-evaluation 最新一批)</h2>
   <div id="papers"><div class="skel">載入中…</div></div>
 </div>
@@ -287,10 +301,45 @@ async function launch(){
   btn.disabled = false;
 }
 
+/* ── 出題:寫進 labos-research 的課題佇列 ───────────── */
+const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
+async function loadQueue(){
+  try {
+    const cur = await gh(`/repos/${cfg.owner}/labos-research/contents/data/inquiry_queue.json`);
+    const list = JSON.parse(decodeURIComponent(escape(atob(cur.content))));
+    const pending = list.filter(q => q.status === "pending").length;
+    const active = list.find(q => q.status === "active");
+    $("queueView").textContent =
+      (active ? `🎓 進行中:${active.question.slice(0,40)}… ` : "") +
+      (pending ? `|排隊中 ${pending} 題` : (active ? "" : "目前沒有排隊中的課題"));
+    return {list, sha: cur.sha};
+  } catch { $("queueView").textContent = ""; return {list: [], sha: undefined}; }
+}
+async function askQuestion(){
+  const q = $("question").value.trim();
+  if (!q) { toast("先輸入課題"); return; }
+  $("askBtn").disabled = true;
+  try {
+    const {list, sha} = await loadQueue();
+    list.push({ id: Date.now().toString(36), question: q,
+                created: new Date().toISOString(), status: "pending" });
+    const body = { message: `🎓 PI 出題: ${q.slice(0,50)}`,
+                   content: b64(JSON.stringify(list, null, 1)) };
+    if (sha) body.sha = sha;
+    await gh(`/repos/${cfg.owner}/labos-research/contents/data/inquiry_queue.json`,
+             { method: "PUT", body: JSON.stringify(body) });
+    $("question").value = "";
+    toast("🎓 已出題!明早 05:00 博士生開始拆解");
+    loadQueue();
+  } catch(e){ toast(`出題失敗:${e.message}`); }
+  $("askBtn").disabled = false;
+}
+$("askBtn").onclick = askQuestion;
+
 /* ── 啟動 ───────────────────────────────────────────── */
 function refresh(){
   if (!cfg.ok){ $("setupDlg").showModal(); return; }
-  loadFleet(); loadPapers(); loadDigest();
+  loadFleet(); loadPapers(); loadDigest(); loadQueue();
 }
 $("refreshBtn").onclick = refresh;
 $("setupBtn").onclick = () => { $("owner").value = cfg.owner;
